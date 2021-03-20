@@ -1,2 +1,2 @@
-# recipes_restful_api
-Built in Flask with mongo DB
+# Recipes RESTFul API
+Built in Flask with mongo DB Atlas

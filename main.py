@@ -1,8 +1,12 @@
-from flask import Flask, render_template, redirect, url_for, request, session, flash
+from flask import Flask, render_template, redirect, url_for, request, session, flash, jsonify
 from datetime import timedelta
+import requests
 import db_op
 from flask_restful import Resource, Api, reqparse, abort, fields, marshal_with
 import requests
+from bson import json_util, ObjectId
+from pprint import pprint
+
 
 app = Flask(__name__)
 api = Api(app)
@@ -10,31 +14,31 @@ api = Api(app)
 BASE = "http://127.0.0.1:5000/"
 
 recipe_put_args = reqparse.RequestParser()
-recipe_put_args.add_argument("name", type=str, help="Name of the video is required", required=True)
-recipe_put_args.add_argument("ingredients", type=list, help="Views of the video", required=True)
-recipe_put_args.add_argument("owner", type=str, help="Likes on the video", required=True)
-recipe_put_args.add_argument("time", type=str, help="Name of the video is required", required=True)
-recipe_put_args.add_argument("process", type=str, help="Views of the video", required=True)
-recipe_put_args.add_argument("tips", type=list, help="Likes on the video", required=True)
-recipe_put_args.add_argument("image", type=str, help="Name of the video is required", required=True)
+recipe_put_args.add_argument("name", type=str, help="Name required", required=True)
+recipe_put_args.add_argument("ingredients", help="Ingredients required", required=True, type=str,action="append")
+recipe_put_args.add_argument("owner", type=str, help="Owner required", required=True)
+recipe_put_args.add_argument("time", type=str, help="Time required", required=True)
+recipe_put_args.add_argument("process", type=str, help="Process required", required=True)
+recipe_put_args.add_argument("tips", type=str, action="append", help="tips required", required=True)
+recipe_put_args.add_argument("image", type=str, help="Image required", required=True)
 
 recipe_update_args = reqparse.RequestParser()
-recipe_update_args.add_argument("name", type=str, help="Name of the video is required")
-recipe_update_args.add_argument("ingredients", type=list, help="Views of the video")
-recipe_update_args.add_argument("owner", type=str, help="Likes on the video")
-recipe_update_args.add_argument("time", type=str, help="Name of the video is required")
-recipe_update_args.add_argument("process", type=str, help="Views of the video")
-recipe_update_args.add_argument("tips", type=list, help="Likes on the video")
-recipe_update_args.add_argument("image", type=str, help="Name of the video is required")
+recipe_update_args.add_argument("name", type=str)
+recipe_update_args.add_argument("ingredients", type=str, action="append")
+recipe_update_args.add_argument("owner", type=str)
+recipe_update_args.add_argument("time", type=str)
+recipe_update_args.add_argument("process", type=str)
+recipe_update_args.add_argument("tips", type=str, action="append")
+recipe_update_args.add_argument("image", type=str)
 
 resource_fields = {
 	'name': fields.String,
-	'ingredients': fields.List,
+	'ingredients': fields.List(fields.String),
 	'owner': fields.String,
     'time': fields.String,
 	'process': fields.String,
-	'tips': fields.List,
-	'image': fields.Url
+	'tips': fields.List(fields.String),
+	'image': fields.String
 }
 
 class Recipe(Resource):
@@ -51,7 +55,6 @@ class Recipe(Resource):
     def put(self, recipe_name):
         db = db_op.db_connection()
         result =  db.recipes.find_one({'name': recipe_name})
-		
         if result:
             abort(409, message="Recipe for that meal already exists...")
 		
@@ -64,6 +67,8 @@ class Recipe(Resource):
         new_recipe['process'] = args['process']
         new_recipe['tips'] = args['tips']
         new_recipe['image'] = args['image']
+
+        print(new_recipe)
         
         db.recipes.insert_one(new_recipe)
 		
@@ -82,15 +87,9 @@ class Recipe(Resource):
         for arg in args:
             if args[arg]:
                 updated_recipe[arg] = args[arg]
+        print(updated_recipe)
 
-        #if args['name']:
-		#	result.name = args['name']
-		#if args['views']:
-		#	result.views = args['views']
-		#if args['likes']:
-		#	result.likes = args['likes']
-
-        db.recipes.update_one({'name': recipe_name}, {"$set": {updated_recipe}})
+        db.recipes.update_one({'name': recipe_name}, {"$set": updated_recipe})
         result = db.recipes.find_one({'name': recipe_name})
 
         return result
@@ -106,17 +105,27 @@ class Recipe(Resource):
 		
         return 'Deletion successful.', 204 
 
-api.add_resource(Recipe, '/recipe/<string:recipe_name>')
+api.add_resource(Recipe, '/recipes/<string:recipe_name>')
 
 @app.route('/')
 def home():
     return "<h1>Welcome to my Recipe's RESTful API</h1>"
 
-@app.route('/get_all')
+@app.route('/recipes/')
 def get_all():
     db = db_op.db_connection()
-    response = db.recipes.find()
-    return render_template(response)
+    result =  db.recipes.find()
+    elements=[]
+    for e in result:
+        n = {}
+        for k in e:
+            if isinstance(e[k], ObjectId):
+                n[k] =  str(e[k])
+            else:
+                n[k] = e[k]
+        elements.append(n)
+    return jsonify(elements)
+
 
 if __name__ == "__main__":
     app.run(debug=True)
